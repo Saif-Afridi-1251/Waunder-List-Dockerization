@@ -1,0 +1,53 @@
+services:
+  mongo:
+    image: mongo:8.0
+    restart: unless-stopped
+
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-wanderlust}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-wanderlust_dev_password}
+
+    volumes:
+      - mongo_data:/data/db
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          mongosh --quiet
+          --username "$${MONGO_INITDB_ROOT_USERNAME}"
+          --password "$${MONGO_INITDB_ROOT_PASSWORD}"
+          --authenticationDatabase admin
+          --eval "quit(db.adminCommand({ ping: 1 }).ok ? 0 : 2)"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    restart: unless-stopped
+
+    ports:
+      - "${APP_PORT:-8080}:8080"
+
+    env_file:
+      - .env
+
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      HOST: 0.0.0.0
+      ATLASDB_URL: mongodb://${MONGO_ROOT_USERNAME:-wanderlust}:${MONGO_ROOT_PASSWORD:-wanderlust_dev_password}@mongo:27017/wanderlust?authSource=admin
+
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+    init: true
+
+volumes:
+  mongo_data:
